@@ -28,7 +28,7 @@ Convert a hub model:
 Optimize a hub model:
 `optimum_optimize` 
 
-Apply LPOT quantization:
+Apply Neural Compressor (LPOT) quantization:
 
 ```bash
 python examples/pytorch/text-classification/run_glue.py \
