@@ -12,5 +12,16 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-from .quantization import LpotQuantizer, LpotQuantizationMode
-from .config import LpotConfig
+def model_calibration(self, q_model, dataloader, iterations=1):
+    import torch
+    assert iterations > 0
+    with torch.no_grad():
+        for idx, input in enumerate(dataloader):
+            _ = q_model(**input)
+            if idx >= iterations - 1:
+                break
+
+
+def load_inc_config(model, config_path):
+    from neural_compressor.utils.pytorch import load
+    return load(config_path, model)

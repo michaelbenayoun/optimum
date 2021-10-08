@@ -26,7 +26,7 @@ from transformers import (
     TrainingArguments,
 )
 from datasets import load_dataset, load_metric
-from optimum.intel.lpot.quantization import LpotQuantizerForSequenceClassification
+from optimum.intel.neural_compressor.quantization import IncQuantizerForSequenceClassification
 
 
 task_to_keys = {
@@ -43,7 +43,7 @@ task_to_keys = {
 }
 
 
-class TestLPOT(unittest.TestCase):
+class TestINC(unittest.TestCase):
 
     def test_quantization(self):
         model_name = "textattack/bert-base-uncased-SST-2"
@@ -58,7 +58,7 @@ class TestLPOT(unittest.TestCase):
         data_collator = default_data_collator
         sentence1_key, sentence2_key = task_to_keys[task]
 
-        quantizer = LpotQuantizerForSequenceClassification.from_config(
+        quantizer = IncQuantizerForSequenceClassification.from_config(
             config_path,
             "quantization.yml",
             model_name_or_path=model_name,
