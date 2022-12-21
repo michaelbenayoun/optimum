@@ -30,6 +30,10 @@ from transformers import (
     AutoModelForSemanticSegmentation,
     AutoModelForSequenceClassification,
     AutoModelForTokenClassification,
+    AutoModelForAudioClassification,
+    AutoModelForCTC,
+    AutoModelForAudioFrameClassification,
+    AutoModelForAudioXVector,
 )
 from transformers.file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from transformers.modeling_outputs import (
@@ -1686,6 +1690,104 @@ CUSTOM_TASKS_EXAMPLE = r"""
     >>> pred = onnx_extractor(text)
     ```
 """
+
+
+@add_start_docstrings(
+    """
+    ONNX model for audio-classification tasks.
+    """,
+    ONNX_MODEL_START_DOCSTRING,
+)
+class ORTModelForAudioClassification(ORTModel):
+    """
+    Image Classification model for ONNX.
+    """
+
+    auto_model_class = AutoModelForAudioClassification
+
+    def __init__(self, model=None, config=None, use_io_binding=True, **kwargs):
+        super().__init__(model, config, use_io_binding, **kwargs)
+        self.model_outputs = {output_key.name: idx for idx, output_key in enumerate(self.model.get_outputs())}
+        self.name_to_np_type = TypeHelper.get_io_numpy_type_map(self.model) if self.use_io_binding else None
+
+    def prepare_logits_buffer(self, batch_size):
+        """Prepares the buffer of logits with a 1D tensor on shape: (batch_size, config.num_labels)."""
+        ort_type = TypeHelper.get_output_type(self.model, "logits")
+        torch_type = TypeHelper.ort_type_to_torch_type(ort_type)
+
+        logits_shape = (batch_size, self.config.num_labels)
+        logits_buffer = torch.empty(np.prod(logits_shape), dtype=torch_type, device=self.device).contiguous()
+
+        return logits_shape, logits_buffer
+
+    def prepare_io_binding(
+        self,
+        pixel_values: torch.Tensor,
+    ):
+        io_binding = self.model.io_binding()
+
+        # bind pixel values
+        pixel_values = pixel_values.contiguous()
+        io_binding.bind_input(
+            "pixel_values",
+            pixel_values.device.type,
+            self.device.index,
+            self.name_to_np_type["pixel_values"],
+            tuple(pixel_values.shape),
+            pixel_values.data_ptr(),
+        )
+
+        # bind logits
+        logits_shape, logits_buffer = self.prepare_logits_buffer(batch_size=pixel_values.size(0))
+        io_binding.bind_output(
+            "logits",
+            logits_buffer.device.type,
+            self.device.index,
+            self.name_to_np_type["logits"],
+            logits_shape,
+            logits_buffer.data_ptr(),
+        )
+        output_shapes = {"logits": logits_shape}
+        output_buffers = {"logits": logits_buffer}
+
+        return io_binding, output_shapes, output_buffers
+
+    @add_start_docstrings_to_model_forward(
+        ONNX_IMAGE_INPUTS_DOCSTRING.format("batch_size, num_channels, height, width")
+        + IMAGE_CLASSIFICATION_EXAMPLE.format(
+            processor_class=_FEATURE_EXTRACTOR_FOR_DOC,
+            model_class="ORTModelForImageClassification",
+            checkpoint="optimum/vit-base-patch16-224",
+        )
+    )
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        **kwargs,
+    ):
+        if self.device.type == "cuda" and self.use_io_binding:
+            io_binding, output_shapes, output_buffers = self.prepare_io_binding(pixel_values)
+
+            # run inference with binding & synchronize in case of multiple CUDA streams
+            io_binding.synchronize_inputs()
+            self.model.run_with_iobinding(io_binding)
+            io_binding.synchronize_outputs()
+
+            # converts output to namedtuple for pipelines post-processing
+            return ImageClassifierOutput(logits=output_buffers["logits"].view(output_shapes["logits"]))
+        else:
+            # converts pytorch inputs into numpy inputs for onnx
+            onnx_inputs = {
+                "pixel_values": pixel_values.cpu().detach().numpy(),
+            }
+
+            # run inference
+            outputs = self.model.run(None, onnx_inputs)
+            logits = torch.from_numpy(outputs[self.model_outputs["logits"]])
+
+            # converts output to namedtuple for pipelines post-processing
+            return ImageClassifierOutput(logits=logits)
+
 
 
 @add_start_docstrings(
