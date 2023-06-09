@@ -53,6 +53,12 @@ ExportConfigConstructor = Callable[[PretrainedConfig], "ExportConfig"]
 TaskNameToExportConfigDict = Dict[str, ExportConfigConstructor]
 
 
+BACKEND_CONFIG_HAS_WITH_PAST_CONSTRUCTOR = {
+        "onnx": True,
+        "tflite": False,
+}
+
+
 def is_backend_available(backend):
     backend_availablilty = {
         "onnx": is_onnx_available(),
@@ -113,6 +119,8 @@ def supported_tasks_mapping(
                     task, supported_backends_for_task = task
                     if backend not in supported_backends_for_task:
                         continue
+                if task.endswith("with-past") and not BACKEND_CONFIG_HAS_WITH_PAST_CONSTRUCTOR[backend]:
+                    continue
                 config_constructor = make_backend_config_constructor_for_task(config_cls, task)
                 mapping[backend][task] = config_constructor
     return mapping
@@ -491,6 +499,7 @@ class TasksManager:
             "text-classification",
             "token-classification",
             onnx="GPT2OnnxConfig",
+            tflite="GPT2TFLiteConfig",
         ),
         "gptj": supported_tasks_mapping(
             "feature-extraction",
@@ -1380,7 +1389,7 @@ class TasksManager:
         model_class_name = None
         kwargs = {"subfolder": subfolder, "revision": revision, "cache_dir": cache_dir, **model_kwargs}
 
-        if TasksManager._TASKS_TO_LIBRARY[task.replace("-with-past", "")] == "transformers":
+        if TasksManager._TASKS_TO_LIBRARY[TasksManager.map_from_synonym(task.replace("-with-past", ""))] == "transformers":
             config = AutoConfig.from_pretrained(model_name_or_path, **kwargs)
             model_type = config.model_type.replace("_", "-")
             # TODO: if automatic-speech-recognition is passed as task, it may map to several

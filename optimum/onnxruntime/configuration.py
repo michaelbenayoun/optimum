@@ -14,11 +14,12 @@
 """Configuration classes for graph optimization and quantization with ONNX Runtime."""
 
 import os
+import copy
 import warnings
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union, Any
 
 from datasets import Dataset
 from packaging.version import Version, parse
@@ -947,8 +948,8 @@ class ORTConfig(BaseConfig):
         self.opset = opset
         self.use_external_data_format = use_external_data_format
         self.one_external_file = one_external_file
-        self.optimization = self.dataclass_to_dict(optimization)
-        self.quantization = self.dataclass_to_dict(quantization)
+        self.optimization = optimization 
+        self.quantization = quantization
         self.optimum_version = kwargs.pop("optimum_version", None)
 
     @staticmethod
@@ -965,3 +966,9 @@ class ORTConfig(BaseConfig):
                 v = [elem.name if isinstance(elem, Enum) else elem for elem in v]
             new_config[k] = v
         return new_config
+
+    def to_dict(self) -> Dict[str, Any]:
+        clone = copy.deepcopy(self)
+        clone.optimization = self.dataclass_to_dict(clone.optimization)
+        clone.quantization = self.dataclass_to_dict(clone.quantization)
+        return BaseConfig.to_dict(clone)

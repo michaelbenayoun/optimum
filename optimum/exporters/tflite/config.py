@@ -18,13 +18,22 @@ configurations.
 """
 
 from ...utils import DummyTextInputGenerator, DummyVisionInputGenerator, logging
-from .base import TFLiteConfig
+from .base import TFLiteConfigWithGenerate, TFLiteConfig
 
 
 logger = logging.get_logger(__name__)
 
 
 class TextEncoderTFliteConfig(TFLiteConfig):
+    """
+    Handles encoder-based text architectures.
+    """
+
+    DUMMY_INPUT_GENERATOR_CLASSES = (DummyTextInputGenerator,)
+    MANDATORY_AXES = ("batch_size", "sequence_length", ("multiple-choice", "num_choices"))
+
+
+class TextDecoderTFliteConfig(TFLiteConfigWithGenerate):
     """
     Handles encoder-based text architectures.
     """

@@ -102,7 +102,7 @@ class DummyInputGenerator(ABC):
 
     @staticmethod
     @check_framework_is_available
-    def random_int_tensor(shape: List[int], max_value: int, min_value: int = 0, framework: str = "pt"):
+    def random_int_tensor(shape: List[int], max_value: int, min_value: int = 0, dtype: Optional[Any] = None, framework: str = "pt"):
         """
         Generates a tensor of random integers in the [min_value, max_value) range.
 
@@ -113,6 +113,8 @@ class DummyInputGenerator(ABC):
                 The maximum value allowed.
             min_value (`int`, *optional*, defaults to 0):
                 The minimum value allowed.
+            dtype (`Optional[Any]`, *optional*, defaults to `None`):
+                The dtype of the random tensor of integers.
             framework (`str`, *optional*, defaults to `"pt"`):
                 The requested framework.
 
@@ -120,11 +122,17 @@ class DummyInputGenerator(ABC):
             A random tensor in the requested framework.
         """
         if framework == "pt":
-            return torch.randint(low=min_value, high=max_value, size=shape)
+            if dtype is None:
+                dtype = torch.int32
+            return torch.randint(low=min_value, high=max_value, size=shape, dtype=dtype)
         elif framework == "tf":
-            return tf.random.uniform(shape, minval=min_value, maxval=max_value, dtype=tf.int64)
+            if dtype is None:
+                dtype = tf.int32
+            return tf.random.uniform(shape, minval=min_value, maxval=max_value, dtype=dtype)
         else:
-            return np.random.randint(min_value, high=max_value, size=shape, dtype=np.int64)
+            if dtype is None:
+                dtype = np.int32
+            return np.random.randint(min_value, high=max_value, size=shape, dtype=dtype)
 
     @staticmethod
     @check_framework_is_available

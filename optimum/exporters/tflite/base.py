@@ -372,3 +372,68 @@ class TFLiteConfig(ExportConfig, ABC):
         if isinstance(supported_approaches, dict):
             supported_approaches = supported_approaches.get(self.task, supported_approaches["default"])
         return quantization_approach in supported_approaches
+
+
+class TFLiteConfigWithGenerate(TFLiteConfig):
+    def model_to_signatures(
+        self, model: "TFPreTrainedModel", **model_kwargs: Any
+    ) -> Dict[str, "tf.types.experimental.ConcreteFunction"]:
+        input_names = self.inputs
+        output_names = self.outputs
+
+        def forward(*args):
+            if len(args) != len(input_names):
+                raise ArgumentError(
+                    f"The number of inputs provided ({len(args)} do not match the number of expected inputs: "
+                    f"{', '.join(input_names)}."
+                )
+            kwargs = dict(zip(input_names, args))
+            outputs = model.call(**kwargs, **model_kwargs)
+            return {key: value for key, value in outputs.items() if key in output_names}
+
+        function = tf.function(forward, input_signature=self.inputs_specs).get_concrete_function()
+
+        def create_function_for_decoding_method(decoding_parameters: List["tf.TensorSpec"], method_specific_hardcoded_parameters: Dict[str, Any]):
+
+            names = input_names + [param.name for param in decoding_parameters]
+
+            def decoding_method(*args):
+                kwargs = dict(zip(names, args))
+                generation_config
+                outputs = model.generate(**kwargs, **model_kwargs, **method_specific_hardcoded_parameters)
+                return outputs
+                return {key: value for key, value in outputs.items() if key in output_names}
+
+            return decoding_method
+
+        
+        greedy_decoding_parameters = [
+                tf.TensorSpec((), dtype=tf.int32, name="max_new_tokens"),
+        ]
+        greedy_decoding_specific_parameters = {"use_cache": True, "num_beams": 1, "do_sample": False}
+        greedy_decoding_function = tf.function(
+                create_function_for_decoding_method(greedy_decoding_parameters, greedy_decoding_specific_parameters),
+                jit_compile=True,
+                input_signature=self.inputs_specs + greedy_decoding_parameters,
+        ).get_concrete_function()
+
+        import pdb; pdb.set_trace()
+
+        beam_search_decoding_parameters = [
+                tf.TensorSpec((), dtype=tf.int32, name="max_new_tokens"),
+                tf.TensorSpec((), dtype=tf.int32, name="num_beams"),
+                tf.TensorSpec((), dtype=tf.int32, name="num_return_sequences"),
+        ]
+        beam_search_decoding_specific_parameters = {"use_cache": True, "do_sample": False}
+        dummy_inputs = self.generate_dummy_inputs()
+        dummy_inputs["max_new_tokens"] = tf.constant(10, dtype=tf.int32)
+        dummy_inputs["num_beams"] = tf.constant(5, dtype=tf.int32)
+        dummy_inputs["num_return_sequences"] = tf.constant(2, dtype=tf.int32)
+        beam_search_decoding_function = tf.function(
+                create_function_for_decoding_method(beam_search_decoding_parameters, beam_search_decoding_specific_parameters),
+                jit_compile=True,
+                input_signature=self.inputs_specs + beam_search_decoding_parameters,
+        ).get_concrete_function(*dummy_inputs.values())
+
+
+        return {"model": function, "generate_with_greedy_decoding": greedy_decoding_function, "generate_with_beam_search": beam_search_decoding_function}

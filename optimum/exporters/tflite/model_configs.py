@@ -19,7 +19,7 @@ from typing import List
 
 from ...utils.normalized_config import NormalizedConfigManager
 from .base import QuantizationApproach
-from .config import TextEncoderTFliteConfig, VisionTFLiteConfig
+from .config import TextEncoderTFliteConfig, VisionTFLiteConfig, TextDecoderTFliteConfig
 
 
 class BertTFLiteConfig(TextEncoderTFliteConfig):
@@ -124,3 +124,17 @@ class ResNetTFLiteConfig(VisionTFLiteConfig):
     @property
     def inputs(self) -> List[str]:
         return ["pixel_values"]
+
+
+class GPT2TFLiteConfig(TextDecoderTFliteConfig):
+    NORMALIZED_CONFIG_CLASS = NormalizedConfigManager.get_normalized_config_class("gpt2")
+    # INT8x16 not supported because of the CAST op.
+    # SUPPORTED_QUANTIZATION_APPROACHES = (
+    #     QuantizationApproach.INT8_DYNAMIC,
+    #     QuantizationApproach.INT8,
+    #     QuantizationApproach.FP16,
+    # )
+
+    @property
+    def inputs(self) -> List[str]:
+        return ["input_ids"]
