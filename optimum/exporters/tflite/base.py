@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, Union
 
 from transformers.utils import is_tf_available
+from transformers.generation import GenerationConfig
 
 
 if is_tf_available():
@@ -395,29 +396,28 @@ class TFLiteConfigWithGenerate(TFLiteConfig):
 
         def create_function_for_decoding_method(decoding_parameters: List["tf.TensorSpec"], method_specific_hardcoded_parameters: Dict[str, Any]):
 
-            names = input_names + [param.name for param in decoding_parameters]
+            decoding_parameter_names = [param.name for param in decoding_parameters]
 
             def decoding_method(*args):
-                kwargs = dict(zip(names, args))
-                generation_config
-                outputs = model.generate(**kwargs, **model_kwargs, **method_specific_hardcoded_parameters)
+                print(decoding_parameter_names, args)
+                kwargs = dict(zip(decoding_parameter_names, args[1:])) 
+                generation_config = GenerationConfig(**kwargs, **method_specific_hardcoded_parameters)
+                outputs = model.generate(inputs=args[0], generation_config=generation_config)
                 return outputs
                 return {key: value for key, value in outputs.items() if key in output_names}
 
             return decoding_method
 
         
-        greedy_decoding_parameters = [
-                tf.TensorSpec((), dtype=tf.int32, name="max_new_tokens"),
-        ]
-        greedy_decoding_specific_parameters = {"use_cache": True, "num_beams": 1, "do_sample": False}
-        greedy_decoding_function = tf.function(
-                create_function_for_decoding_method(greedy_decoding_parameters, greedy_decoding_specific_parameters),
-                jit_compile=True,
-                input_signature=self.inputs_specs + greedy_decoding_parameters,
-        ).get_concrete_function()
-
-        import pdb; pdb.set_trace()
+        # greedy_decoding_parameters = [
+        #         tf.TensorSpec((), dtype=tf.int32, name="max_new_tokens"),
+        # ]
+        # greedy_decoding_specific_parameters = {"use_cache": True, "num_beams": 1, "do_sample": False}
+        # greedy_decoding_function = tf.function(
+        #         create_function_for_decoding_method(greedy_decoding_parameters, greedy_decoding_specific_parameters),
+        #         jit_compile=True,
+        #         input_signature=self.inputs_specs + greedy_decoding_parameters,
+        # ).get_concrete_function()
 
         beam_search_decoding_parameters = [
                 tf.TensorSpec((), dtype=tf.int32, name="max_new_tokens"),
@@ -433,7 +433,11 @@ class TFLiteConfigWithGenerate(TFLiteConfig):
                 create_function_for_decoding_method(beam_search_decoding_parameters, beam_search_decoding_specific_parameters),
                 jit_compile=True,
                 input_signature=self.inputs_specs + beam_search_decoding_parameters,
-        ).get_concrete_function(*dummy_inputs.values())
+        ).get_concrete_function()
 
 
-        return {"model": function, "generate_with_greedy_decoding": greedy_decoding_function, "generate_with_beam_search": beam_search_decoding_function}
+        return {
+            "model": function, 
+            # "generate_with_greedy_decoding": greedy_decoding_function, 
+            "generate_with_beam_search": beam_search_decoding_function,
+        }
